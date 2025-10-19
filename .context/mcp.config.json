@@ -1,0 +1,16 @@
+﻿{
+  "flows": [
+    { "name": "dev-loop", "steps": ["env:check", "dev", "smoke"] },
+    { "name": "pre-commit", "steps": ["lint", "format"] },
+    { "name": "reset-db", "steps": ["seed"] }
+  ],
+  "tasks": {
+    "env:check": { "run": "node scripts/check-env.js" },
+    "dev":      { "run": "npm run dev" },
+    "smoke":    { "run": "node scripts/smoke.js" },
+    "lint":     { "run": "echo \"(stub) lint pulado\"" },
+    "format":   { "run": "echo \"(stub) format pulado\"" },
+    "seed":     { "run": "node scripts/seed.js" }
+  }
+}
+
