@@ -1,17 +1,10 @@
 // server.js
 require('dotenv').config();
 
-// DEBUG JWT SECRET (REMOVER DEPOIS)
-const crypto = require('crypto');
-const S = process.env.JWT_SECRET || '';
-const sha = crypto.createHash('sha256').update(S).digest('hex').slice(0, 12);
-const masked = S ? (S.slice(0,6) + '…' + S.slice(-4)) : '(vazio)';
-console.log('[AUTH] JWT_SECRET len=%d sha256=%s masked=%s', S.length, sha, masked);
-
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
 
-// 🔒 Segurança leve
 const mongoose = require('mongoose');
 const mongoSanitize = require('express-mongo-sanitize');
 
@@ -41,10 +34,38 @@ mongoose.set('strictQuery', true);
 mongoose.set('sanitizeFilter', true);
 mongoose.set('sanitizeProjection', true);
 
-// Middlewares base
-app.use(cors());                 // se quiser, em prod, pode restringir origens via env
-app.use(express.json());
-app.use(mongoSanitize());        // remove operadores $ e campos com ponto do payload
+// ===== Segurança Express =====
+app.disable('x-powered-by');
+app.use(
+  helmet({
+    // Evita bloquear assets estáticos que podem vir de outro domínio
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+  })
+);
+
+// CORS:
+// Em produção, use CORS_ORIGINS="https://seu-front.com,https://outro.com"
+// Em dev, libera tudo para facilitar testes.
+const allowedOrigins = (process.env.CORS_ORIGINS || '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+const corsOptions =
+  NODE_ENV === 'production' && allowedOrigins.length
+    ? {
+        origin(origin, cb) {
+          if (!origin) return cb(null, true); // requests sem origin (ex.: curl, health)
+          if (allowedOrigins.includes(origin)) return cb(null, true);
+          cb(new Error('CORS not allowed by policy'), false);
+        },
+        credentials: true,
+      }
+    : { origin: true, credentials: true };
+
+app.use(cors(corsOptions));
+app.use(express.json({ limit: '100kb' })); // limita payload
+app.use(mongoSanitize()); // remove operadores Mongo ($, .) do payload
 
 // 🔎 Healthcheck
 app.get('/health', (_req, res) => res.status(200).json({ ok: true }));
@@ -56,10 +77,8 @@ app.get('/', (_req, res) => {
 
 // 🚦 Rate-limit só em produção (evita travar teus testes locais)
 if (NODE_ENV === 'production') {
-  // exemplo: proteger a rota pública de status
   app.use('/api/matchmaking/status', publicLimiter);
-
-  // se quiser, proteja outras rotas públicas também:
+  // Ex.: proteger outras rotas públicas:
   // app.use('/api/healthcheck', publicLimiter);
 }
 
@@ -81,7 +100,8 @@ const server = app.listen(PORT, () => {
     scheduleMatchTimeoutSweep();
   } catch (err) {
     console.error('❌ Erro ao conectar ao MongoDB:', err?.message || err);
-    // process.exit(1); // em prod você pode querer finalizar o processo
+    // Em produção, você pode querer encerrar o processo:
+    // process.exit(1);
   }
 })();
 
