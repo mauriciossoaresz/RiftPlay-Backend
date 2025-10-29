@@ -19,14 +19,14 @@ const authRoutes = require('./rotas/authRoutes');
 const teamRoutes = require('./rotas/teamroutes');
 const matchmakingRoutes = require('./rotas/matchmakingRoutes');
 
-// Rate limit público (usado só em produção)
+// Rate limit
 const { publicLimiter } = require('./middleware/rateLimit');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 
-// confiar em proxy (Render/Heroku/etc.)
+// Confiar em proxy (Render/Heroku/etc.)
 app.set('trust proxy', 1);
 
 // ===== Segurança Mongoose (não muda comportamento do app) =====
@@ -38,7 +38,8 @@ mongoose.set('sanitizeProjection', true);
 app.disable('x-powered-by');
 app.use(
   helmet({
-    crossOriginResourcePolicy: { policy: 'cross-origin' }, // evita bloquear assets de outros domínios
+    // evita bloquear assets estáticos que podem vir de outro domínio
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
   })
 );
 
@@ -68,15 +69,25 @@ app.use(cors(corsOptions));
 app.use(express.json({ limit: process.env.JSON_LIMIT || '100kb' }));
 app.use(mongoSanitize()); // remove operadores Mongo ($ e .) do payload
 
-// Healthcheck
+// Healthcheck técnico (Render/uptime)
 app.get('/health', (_req, res) => res.status(200).json({ ok: true }));
+
+// Status público para front/monitoramento (com rate-limit)
+app.get('/api/status', publicLimiter, (_req, res) => {
+  res.status(200).json({
+    ok: true,
+    env: NODE_ENV,
+    uptime_s: Math.round(process.uptime()),
+    now: new Date().toISOString(),
+  });
+});
 
 // Rota raiz
 app.get('/', (_req, res) => {
   res.send('Servidor do RiftPlay está rodando com sucesso!');
 });
 
-// Rate-limit só em produção (evita travar testes locais)
+// Rate-limit adicional só em produção para endpoints públicos específicos
 if (NODE_ENV === 'production') {
   app.use('/api/matchmaking/status', publicLimiter);
   // exemplo para outras rotas públicas:
