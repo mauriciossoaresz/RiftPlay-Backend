@@ -27,7 +27,7 @@ const PORT = process.env.PORT || 3000;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 
 // Confiar em proxy (Render/Heroku/etc.)
-app.set('trust proxy', 1);
+if (NODE_ENV === 'production') app.set('trust proxy', 1);
 
 // ===== Segurança Mongoose (não muda comportamento do app) =====
 mongoose.set('strictQuery', true);
@@ -38,7 +38,6 @@ mongoose.set('sanitizeProjection', true);
 app.disable('x-powered-by');
 app.use(
   helmet({
-    // evita bloquear assets estáticos que podem vir de outro domínio
     crossOriginResourcePolicy: { policy: 'cross-origin' },
   })
 );
