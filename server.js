@@ -1,62 +1,80 @@
 // server.js
-require('dotenv').config();
+require("dotenv").config();
 
-const express = require('express');
-const cors = require('cors');
-const helmet = require('helmet');
+const express = require("express");
+const cors = require("cors");
+const helmet = require("helmet");
 
-const mongoose = require('mongoose');
-const mongoSanitize = require('express-mongo-sanitize');
+const mongoose = require("mongoose");
+const mongoSanitize = require("express-mongo-sanitize");
 
 // Conexão com o MongoDB
-const conectarMongo = require('./config/db');
+const conectarMongo = require("./config/db");
 
 // Varredura de timeouts
-const { scheduleMatchTimeoutSweep } = require('./jobs/matchTimeoutSweep');
+const { scheduleMatchTimeoutSweep } = require("./jobs/matchTimeoutSweep");
 
 // Rotas
-const authRoutes = require('./rotas/authRoutes');
-const teamRoutes = require('./rotas/teamroutes');
-const matchmakingRoutes = require('./rotas/matchmakingRoutes');
+const authRoutes = require("./rotas/authRoutes");
+const teamRoutes = require("./rotas/teamroutes");
+const matchmakingRoutes = require("./rotas/matchmakingRoutes");
 
 // Rate limit
-const { publicLimiter } = require('./middleware/rateLimit');
+const { publicLimiter } = require("./middleware/rateLimit");
+
+// Error handlers
+const { notFoundHandler, errorHandler } = require("./middleware/errorHandler");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const NODE_ENV = process.env.NODE_ENV || 'development';
+const NODE_ENV = process.env.NODE_ENV || "development";
 
 // Confiar em proxy (Render/Heroku/etc.)
-if (NODE_ENV === 'production') app.set('trust proxy', 1);
+if (NODE_ENV === "production") app.set("trust proxy", 1);
 
 // ===== Segurança Mongoose (não muda comportamento do app) =====
-mongoose.set('strictQuery', true);
-mongoose.set('sanitizeFilter', true);
-mongoose.set('sanitizeProjection', true);
+mongoose.set("strictQuery", true);
+mongoose.set("sanitizeFilter", true);
+mongoose.set("sanitizeProjection", true);
 
 // ===== Segurança Express =====
-app.disable('x-powered-by');
+app.disable("x-powered-by");
 app.use(
   helmet({
-    crossOriginResourcePolicy: { policy: 'cross-origin' },
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+    hsts: {
+      maxAge: 31536000, // 1 ano
+      includeSubDomains: true,
+      preload: true,
+    },
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        scriptSrc: ["'self'"],
+        imgSrc: ["'self'", "data:", "https:"],
+      },
+    },
+    noSniff: true,
+    frameOptions: { action: "deny" },
   })
 );
 
 // ===== CORS =====
 // Em produção, defina CORS_ORIGINS="https://seu-front.com,https://outro.com"
 // Em dev, libera tudo para facilitar testes.
-const allowedOrigins = (process.env.CORS_ORIGINS || '')
-  .split(',')
+const allowedOrigins = (process.env.CORS_ORIGINS || "")
+  .split(",")
   .map((s) => s.trim())
   .filter(Boolean);
 
 const corsOptions =
-  NODE_ENV === 'production' && allowedOrigins.length
+  NODE_ENV === "production" && allowedOrigins.length
     ? {
         origin(origin, cb) {
           if (!origin) return cb(null, true); // curl/health etc.
           if (allowedOrigins.includes(origin)) return cb(null, true);
-          cb(new Error('CORS not allowed by policy'), false);
+          cb(new Error("CORS not allowed by policy"), false);
         },
         credentials: true,
       }
@@ -65,14 +83,14 @@ const corsOptions =
 app.use(cors(corsOptions));
 
 // ===== Body / Sanitização =====
-app.use(express.json({ limit: process.env.JSON_LIMIT || '100kb' }));
+app.use(express.json({ limit: process.env.JSON_LIMIT || "100kb" }));
 app.use(mongoSanitize()); // remove operadores Mongo ($ e .) do payload
 
 // Healthcheck técnico (Render/uptime)
-app.get('/health', (_req, res) => res.status(200).json({ ok: true }));
+app.get("/health", (_req, res) => res.status(200).json({ ok: true }));
 
 // Status público para front/monitoramento (com rate-limit)
-app.get('/api/status', publicLimiter, (_req, res) => {
+app.get("/api/status", publicLimiter, (_req, res) => {
   res.status(200).json({
     ok: true,
     env: NODE_ENV,
@@ -82,42 +100,50 @@ app.get('/api/status', publicLimiter, (_req, res) => {
 });
 
 // Rota raiz
-app.get('/', (_req, res) => {
-  res.send('Servidor do RiftPlay está rodando com sucesso!');
+app.get("/", (_req, res) => {
+  res.send("Servidor do RiftPlay está rodando com sucesso!");
 });
 
-// Rate-limit adicional só em produção para endpoints públicos específicos
-if (NODE_ENV === 'production') {
-  app.use('/api/matchmaking/status', publicLimiter);
-  // exemplo para outras rotas públicas:
-  // app.use('/api/healthcheck', publicLimiter);
-}
+// Rate-limit adicional para endpoints públicos específicos (sempre aplicado para testes)
+app.use("/api/matchmaking/status", publicLimiter);
+// exemplo para outras rotas públicas:
+// app.use('/api/healthcheck', publicLimiter);
 
 // Rotas da API
-app.use('/api', authRoutes);
-app.use('/api/team', teamRoutes);
-app.use('/api/matchmaking', matchmakingRoutes);
+app.use("/api", authRoutes);
+app.use("/api/team", teamRoutes);
+app.use("/api/matchmaking", matchmakingRoutes);
+
+// Handlers de erro (deve ser o último)
+app.use(notFoundHandler);
+app.use(errorHandler);
 
 // Sobe o HTTP primeiro
 const server = app.listen(PORT, () => {
-  console.log(`🟢 Servidor rodando em: http://localhost:${PORT} (env=${NODE_ENV})`);
+  console.log(
+    `🟢 Servidor rodando em: http://localhost:${PORT} (env=${NODE_ENV})`
+  );
 });
 
 // Conecta no Mongo e inicia o sweep de timeout
 (async () => {
   try {
     await conectarMongo();
-    console.log('✅ MongoDB conectado com sucesso!');
+    console.log("✅ MongoDB conectado com sucesso!");
     scheduleMatchTimeoutSweep();
   } catch (err) {
-    console.error('❌ Erro ao conectar ao MongoDB:', err?.message || err);
+    console.error("❌ Erro ao conectar ao MongoDB:", err?.message || err);
     // Em produção você pode querer encerrar o processo:
     // process.exit(1);
   }
 })();
 
 // (opcional) logs de erros não tratados
-process.on('unhandledRejection', (reason) => console.error('⚠️ UnhandledRejection:', reason));
-process.on('uncaughtException', (err) => console.error('⚠️ UncaughtException:', err));
+process.on("unhandledRejection", (reason) =>
+  console.error("⚠️ UnhandledRejection:", reason)
+);
+process.on("uncaughtException", (err) =>
+  console.error("⚠️ UncaughtException:", err)
+);
 
 module.exports = { app, server };

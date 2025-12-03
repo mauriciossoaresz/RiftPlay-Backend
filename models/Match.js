@@ -15,7 +15,7 @@ const matchSchema = new Schema(
     // Ciclo da partida
     status: {
       type: String,
-      enum: ['pendente', 'em_andamento', 'finalizada', 'cancelada'],
+      enum: ['pendente', 'em_andamento', 'finalizada', 'cancelada', 'em_analise'],
       default: 'pendente',
       index: true,
     },
@@ -46,6 +46,23 @@ const matchSchema = new Schema(
 
     // Placar flexível: string ("13-9") ou objeto ({ a:13, b:9 })
     placar: { type: Schema.Types.Mixed, default: null },
+
+    // Votos dos capitaos (por teamId => "win" | "loss")
+    resultsByTeam: {
+      type: Map,
+      of: {
+        type: String,
+        enum: ['win', 'loss'],
+      },
+      default: {},
+    },
+
+    // Prazo para reportar resultado
+    resultDeadline: { type: Date, default: null },
+
+    // Marcacao de disputa / analise manual
+    disputeReason: { type: String, default: null },
+    disputeCreatedAt: { type: Date, default: null },
   },
   { timestamps: true }
 );

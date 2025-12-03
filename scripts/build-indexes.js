@@ -12,8 +12,10 @@ const mongoose = require('mongoose');
     await conectarMongo();
 
     // Importa modelos DEPOIS da conexão
-    const Match  = require('../models/Match');
-    const Queue  = require('../models/Queue');
+    const Jogador = require('../models/Jogador');
+    const Time = require('../models/Time');
+    const Match = require('../models/Match');
+    const Queue = require('../models/Queue');
     const Player = require('../models/Player');
 
     // Helper: cria índice e ignora conflito de nome/opções (code 85/48)
@@ -31,19 +33,29 @@ const mongoose = require('mongoose');
       }
     }
 
-    // ========= Queue =========
-    await ensureIndex(Queue.collection, { teamId: 1 }, { unique: true, name: 'queue_teamId_unique' });
-    await ensureIndex(Queue.collection, { createdAt: 1 }, { name: 'queue_createdAt_1' });
+    // ========= Jogador =========
+    await ensureIndex(Jogador.collection, { timeId: 1 }, { name: 'jogador_timeId_1' });
+    await ensureIndex(Jogador.collection, { email: 1 }, { unique: true, name: 'jogador_email_unique' });
+    await ensureIndex(Jogador.collection, { cpf: 1 }, { unique: true, name: 'jogador_cpf_unique' });
+
+    // ========= Time =========
+    await ensureIndex(Time.collection, { nome: 1 }, { unique: true, name: 'time_nome_unique' });
+    await ensureIndex(Time.collection, { jogadores: 1 }, { name: 'time_jogadores_1' });
 
     // ========= Match =========
+    await ensureIndex(Match.collection, { status: 1, createdAt: -1 }, { name: 'match_status_createdAt_-1' });
     await ensureIndex(Match.collection, { status: 1, acceptDeadline: 1 }, { name: 'match_status_acceptDeadline_1' });
-    await ensureIndex(Match.collection, { teams: 1, createdAt: 1 }, { name: 'match_teams_createdAt_1' });
-    await ensureIndex(Match.collection, { createdAt: 1 }, { name: 'match_createdAt_1' });
+    await ensureIndex(Match.collection, { teams: 1, createdAt: -1 }, { name: 'match_teams_createdAt_-1' });
+    await ensureIndex(Match.collection, { teams: 1, status: 1 }, { name: 'match_teams_status_1' });
+
+    // ========= Queue =========
+    await ensureIndex(Queue.collection, { teamId: 1 }, { unique: true, name: 'queue_teamId_unique' });
+    await ensureIndex(Queue.collection, { valorAposta: 1, createdAt: 1 }, { name: 'queue_aposta_createdAt_1' });
+    // TTL é criado dinamicamente no schema, não aqui
 
     // ========= Player =========
-    // usamos teamId (não timeId). saldo_1 é opcional (bom p/ relatórios).
     await ensureIndex(Player.collection, { teamId: 1 }, { name: 'player_teamId_1' });
-    await ensureIndex(Player.collection, { saldo: 1 },  { name: 'saldo_1' });
+    await ensureIndex(Player.collection, { saldo: 1 }, { name: 'player_saldo_1' });
 
     // ---- dump final de índices ----
     console.log('\nÍndices de Queue:',  await Queue.collection.indexes());

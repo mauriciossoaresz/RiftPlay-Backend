@@ -1,5 +1,8 @@
 const mongoose = require('mongoose');
 
+// evita warnings de filtros fora do schema
+mongoose.set('strictQuery', false);
+
 const conectarMongo = async () => {
   try {
     const isProd = process.env.NODE_ENV === 'production';
@@ -8,7 +11,8 @@ const conectarMongo = async () => {
       // opções compatíveis com Mongoose 8
       maxPoolSize: 10,
       serverSelectionTimeoutMS: 10_000,
-      autoIndex: !isProd, // evita recriar índices em produção
+      autoIndex: !isProd,          // evita recriar índices em produção
+      bufferCommands: false        // falhar rápido se conexão cair
     });
 
     console.log('✅ MongoDB conectado com sucesso!');
